@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "clickup": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp/dist/index.js"],
+      "env": {
+        "CLICKUP_API_TOKEN": "${user_config.api_token}",
+        "CLICKUP_BASE_URL": "${CLICKUP_BASE_URL}",
+        "CLICKUP_DRY_RUN": "${CLICKUP_DRY_RUN}"
+      }
+    }
+  }
+}

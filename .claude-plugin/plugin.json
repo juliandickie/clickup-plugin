@@ -1,0 +1,22 @@
+{
+  "name": "clickup",
+  "version": "0.1.0",
+  "description": "Talk to ClickUp from Claude Code. Token-disciplined task access and first-class bulk operations. Proactively activates for: (1) listing or auditing ClickUp tasks, (2) bulk task updates, (3) single task create/update.",
+  "author": {
+    "name": "Institute of Digital Dentistry",
+    "email": "julian@instituteofdigitaldentistry.com"
+  },
+  "homepage": "https://github.com/juliandickie/clickup-plugin",
+  "repository": "https://github.com/juliandickie/clickup-plugin",
+  "license": "MIT",
+  "keywords": ["clickup", "tasks", "project-management", "bulk", "mcp"],
+  "userConfig": {
+    "api_token": {
+      "type": "string",
+      "title": "ClickUp API Token",
+      "description": "Personal token (pk_...). Settings -> Apps -> Generate API Token.",
+      "sensitive": true,
+      "required": true
+    }
+  }
+}
