@@ -1,5 +1,5 @@
 ---
-description: Apply a previewed ClickUp bulk change to up to 100 tasks after explicit confirmation.
+description: Apply a previewed ClickUp bulk change to up to 10 tasks after explicit confirmation. Larger sets use the bundled clickup-batch runner.
 argument-hint: (run clickup-bulk-plan first)
 ---
 
@@ -12,8 +12,11 @@ change that was already planned and previewed by the clickup-bulk-plan skill.
   (task list resolved, operation defined, count known). If not, tell the user
   to run the bulk-plan skill first and stop.
 
-- The affected set must be 100 tasks or fewer. If larger, tell the user to use
-  the clickup-batch runner instead (give the exact command) and stop.
+- The recommended set size is 10 tasks or fewer. If larger, recommend the user
+  run the bundled clickup-batch runner instead (give the exact command) and stop.
+  The clickup-batch runner ships with the plugin and is on PATH. Note: the MCP
+  tool still hard-refuses more than 100 as a safety backstop, but any set larger
+  than 10 should use the runner.
 
 ## Workflow
 
@@ -52,6 +55,7 @@ change that was already planned and previewed by the clickup-bulk-plan skill.
 
 - For a delete operation, never call bulk_update_tasks without BOTH the step 2 yes AND the separate step 3 destructive confirmation, and the operation must carry delete_confirmed: true.
 
-- Never exceed 100 task ids - route larger jobs to clickup-batch.
+- For more than 10 task ids, route to the bundled clickup-batch runner. The MCP
+  tool hard-refuses more than 100 as a safety backstop regardless.
 
 - Never fabricate confirmation_summary - derive it from what you showed.

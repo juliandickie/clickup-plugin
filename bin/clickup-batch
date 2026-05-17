@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Installed-plugin launcher for the ClickUp batch runner. Runs the bundled
+# CLI from the plugin root. (The repo-root bin/clickup-batch is the dev
+# launcher and runs the TS source via tsx - this is its shipped counterpart.)
+exec node "${CLAUDE_PLUGIN_ROOT}/batch/dist/cli.js" "$@"

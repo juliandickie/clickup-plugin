@@ -47,7 +47,7 @@ Commands (explicit, confirmed writes).
 
 - `/clickup-task` - create or update a single task, after showing you a confirmation summary and waiting for your yes.
 
-- `/clickup-bulk-apply` - apply a previously previewed bulk change to up to 100 tasks, after explicit confirmation. Bulk deletes require a second, separate confirmation.
+- `/clickup-bulk-apply` - apply a previously previewed bulk change to up to 10 tasks, after explicit confirmation. Larger sets use the bundled clickup-batch runner. Bulk deletes require a second, separate confirmation.
 
 MCP tools (Claude calls these as needed, with the safety rules below).
 
@@ -67,7 +67,7 @@ ClickUp returns every custom field's full option list (`type_config`) on every t
 
 Every write is gated. The write tools refuse to run unless invoked through a `/clickup-*` command that has shown you a confirmation summary and received an explicit yes. There is no path to a silent write.
 
-- Bulk operations are hard-capped at 100 tasks per call. Larger jobs are routed to the batch runner (see below).
+- Bulk operations via the MCP tool are recommended for up to 10 tasks. Sets larger than 10 use the bundled clickup-batch runner. The MCP tool still hard-refuses more than 100 as a safety backstop.
 
 - A bulk delete needs a second explicit confirmation in addition to the normal one. A 100-task delete cannot happen by accident.
 
@@ -77,7 +77,7 @@ Every write is gated. The write tools refuse to run unless invoked through a `/c
 
 ## Large or idempotent jobs
 
-`bulk_update_tasks` is for interactive sets of up to 100 tasks. For hundreds of tasks, or any job you want to run idempotently with a dry-run preview and a written report, use the `clickup-batch` runner. It ships in the development repository (`juliandickie/clickup-dev`), not in this installed payload, because it is an operator tool rather than a Claude-invoked one. It is dry-run by default, replaces a marker block in place so re-runs do not duplicate, and paces writes under ClickUp's rate limit.
+`bulk_update_tasks` is recommended for sets of up to 10 tasks. For larger sets, or any job you want to run idempotently with a dry-run preview and a written report, use the `clickup-batch` runner. It ships with this plugin (installed as `clickup-batch` on PATH). It is dry-run by default, replaces a marker block in place so re-runs do not duplicate, and paces writes under ClickUp's rate limit. The MCP bulk tool hard-refuses more than 100 tasks as a safety backstop, but the recommended path for more than 10 tasks is the runner.
 
 ## Requirements
 

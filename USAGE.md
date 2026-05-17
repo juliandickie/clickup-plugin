@@ -30,7 +30,7 @@ Use `/clickup-task`. For example `/clickup-task update <task> set status to done
 
 ## Bulk changes
 
-1. Ask for a bulk plan - "set status Blocked on every task in list X assigned to nobody". The `clickup-bulk-plan` skill resolves the set, shows you the exact count and a sample, and states the routing - 100 or fewer goes through `/clickup-bulk-apply`; more than 100 goes to the batch runner. This skill never writes.
+1. Ask for a bulk plan - "set status Blocked on every task in list X assigned to nobody". The `clickup-bulk-plan` skill resolves the set, shows you the exact count and a sample, and states the routing - 10 or fewer goes through `/clickup-bulk-apply`; more than 10 goes to the bundled clickup-batch runner (which ships with the plugin and is on PATH). The MCP bulk tool still hard-refuses more than 100 as a safety backstop. This skill never writes.
 
 2. Apply with `/clickup-bulk-apply`. It restates the change, shows a confirmation summary, and waits for an explicit yes. It reports updated and failed counts, and lists any failures with their errors.
 
@@ -42,7 +42,7 @@ Set `CLICKUP_DRY_RUN=1` in the plugin's environment. Every write tool then retur
 
 ## Large or idempotent jobs
 
-`bulk_update_tasks` caps at 100 tasks per call by design. For hundreds of tasks, or a job you want to re-run safely (for example appending a context block to many task descriptions), use the `clickup-batch` runner from the development repository. It is dry-run by default, writes a markdown report of every change, and on a second run replaces its marker block in place rather than appending a duplicate, so running it twice equals running it once. It also paces writes to stay under ClickUp's per-minute limit.
+`bulk_update_tasks` is recommended for up to 10 tasks. For larger sets, or a job you want to re-run safely (for example appending a context block to many task descriptions), use the `clickup-batch` runner. It ships with this plugin and is available as `clickup-batch` on PATH. It is dry-run by default, writes a markdown report of every change, and on a second run replaces its marker block in place rather than appending a duplicate, so running it twice equals running it once. It also paces writes to stay under ClickUp's per-minute limit. The MCP bulk tool hard-refuses more than 100 as a safety backstop, but any set larger than 10 should use the runner.
 
 ## Rate limits and retries
 
@@ -58,7 +58,7 @@ Every mutating call appends one line to `~/.local/share/clickup-plugin/audit.log
 
 - A bulk run reports many failures - usually transient rate limiting. Re-run `/clickup-bulk-apply`; it only changes what still needs changing.
 
-- "exceeds the 100-task per-call cap" - the set is larger than 100. Use the batch runner.
+- "exceeds the 100-task per-call cap" - the set is larger than 100. The MCP tool hard-refuses at this point as a safety backstop. Use the bundled clickup-batch runner, which is on PATH.
 
 - A bulk delete is rejected with a `delete_confirmed` message - that is the second-signal guard working. Go through `/clickup-bulk-apply`, which collects the extra destructive confirmation for you.
 

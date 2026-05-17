@@ -1,6 +1,6 @@
 {
   "name": "clickup",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Talk to ClickUp from Claude Code. Token-disciplined task access and first-class bulk operations. Proactively activates for: (1) listing or auditing ClickUp tasks, (2) bulk task updates, (3) single task create/update.",
   "author": {
     "name": "Institute of Digital Dentistry",
