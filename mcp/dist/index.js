@@ -23702,6 +23702,7 @@ function registerBulkTools(server, client) {
 }
 
 // src/index.ts
+var VERSION = true ? "0.1.4" : "0.0.0-dev";
 async function main() {
   const config2 = await loadConfig();
   const client = new ClickUpClient(config2);
@@ -23723,7 +23724,7 @@ async function main() {
     }
     process.exit(1);
   }
-  const server = new McpServer({ name: "clickup", version: "0.1.0" });
+  const server = new McpServer({ name: "clickup", version: VERSION });
   registerNavigationTools(server, client);
   registerTaskReadTools(server, client);
   registerTaskWriteTools(server, client);

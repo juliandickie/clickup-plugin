@@ -26,6 +26,8 @@ The development monorepo holds the MCP server TypeScript source, the batch runne
 
 - Tool argument types are derived from a single Zod schema per tool, not duplicated.
 
+- The version is single-sourced from plugin/.claude-plugin/plugin.json. The build injects it into the MCP server and the publish workflow patches marketplace.json from it, so it is never hand-edited anywhere else.
+
 - House text style - no em or en dashes, no colons in headings, straight quotes, a blank line between list items, no emojis. This applies to docs, skill prose, and user-facing strings.
 
 ## Security
