@@ -1,23 +1,23 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "clickup",
-  "description": "Standalone marketplace for the ClickUp Claude Code plugin - token-disciplined task access and first-class bulk operations.",
+  "description": "Standalone marketplace for the ClickUp Claude Code plugin - token-disciplined task access and first-class, audited bulk operations.",
   "owner": {
     "name": "Institute of Digital Dentistry",
     "url": "https://github.com/juliandickie"
   },
   "metadata": {
-    "version": "0.1.2"
+    "version": "0.1.3"
   },
   "plugins": [
     {
       "name": "clickup",
-      "description": "Talk to ClickUp from Claude Code. Token-disciplined task access and first-class bulk operations.",
+      "description": "Talk to ClickUp from Claude Code. Token-disciplined task access and first-class, audited bulk operations.",
       "author": {
         "name": "Institute of Digital Dentistry",
         "email": "julian@instituteofdigitaldentistry.com"
       },
-      "homepage": "https://github.com/juliandickie/clickup-plugin",
+      "homepage": "https://promarketing.co",
       "repository": "https://github.com/juliandickie/clickup-plugin",
       "license": "MIT",
       "category": "productivity",

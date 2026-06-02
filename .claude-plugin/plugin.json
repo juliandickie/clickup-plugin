@@ -1,12 +1,12 @@
 {
   "name": "clickup",
-  "version": "0.1.2",
-  "description": "Talk to ClickUp from Claude Code. Token-disciplined task access and first-class bulk operations. Proactively activates for: (1) listing or auditing ClickUp tasks, (2) bulk task updates, (3) single task create/update.",
+  "version": "0.1.3",
+  "description": "Talk to ClickUp from Claude Code. Token-disciplined task access and first-class, audited bulk operations. Proactively activates for: (1) listing or auditing ClickUp tasks, (2) bulk task updates, (3) single task create/update.",
   "author": {
     "name": "Institute of Digital Dentistry",
     "email": "julian@instituteofdigitaldentistry.com"
   },
-  "homepage": "https://github.com/juliandickie/clickup-plugin",
+  "homepage": "https://promarketing.co",
   "repository": "https://github.com/juliandickie/clickup-plugin",
   "license": "MIT",
   "keywords": ["clickup", "tasks", "project-management", "bulk", "mcp"],

@@ -1,12 +1,35 @@
+<p align="center">
+  <img src="assets/hero.png" alt="ClickUp for Claude Code" width="100%">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Claude%20Code-plugin-8A2BE2" alt="Claude Code plugin">
+  <img src="https://img.shields.io/badge/ClickUp%20API-v2-7B68EE" alt="ClickUp API v2">
+  <img src="https://img.shields.io/badge/node-%3E%3D18-3C873A" alt="Node 18 or newer">
+  <img src="https://img.shields.io/badge/license-MIT-success" alt="MIT license">
+</p>
+
+<p align="center">
+  <b>Talk to ClickUp from Claude Code with token-disciplined task access and first-class, audited bulk operations.</b>
+</p>
+
 # ClickUp for Claude Code
 
-Talk to ClickUp from Claude Code with token-disciplined task access and first-class bulk operations. This plugin exists because the stock ClickUp MCP connector has two practical problems - it inlines a full custom-field option schema on every task (tens of thousands of redundant tokens on a real list) and it has no real bulk surface. This plugin fixes both - it strips per-task field schemas by default and ships gated, audited bulk operations plus a separate runner for very large idempotent jobs.
+You run real work in ClickUp, and you drive Claude Code from the terminal. The two should talk to each other. The stock ClickUp connector makes that expensive and nerve-wracking on a real workspace, in two specific ways.
 
-Works with any ClickUp workspace. You supply your own personal token.
+First, it is wasteful. It inlines the full custom-field option schema (`type_config`) on every single task it returns. On a list with dozens of options across hundreds of tasks, that is tens of thousands of redundant tokens on a single pull, before you have asked a single question.
+
+Second, it is not safe to scale. There is no real bulk surface, so a mass change is either a hundred careful single calls or a leap of faith. And the moment a tool can touch a hundred tasks at once, the fear is rational. One bad call could reassign a sprint or delete a quarter of a board, and you would have no record of what happened.
+
+A tool you are afraid to run at scale is not really a tool. This plugin was built for exactly that tension. It strips the schema bloat by default, and it puts a hard, explicit confirmation in front of every write, with a capped bulk path, a dry-run kill switch, and a local audit log of every mutation. You get ClickUp control from Claude Code that is fast, cheap, and auditable enough to actually trust.
+
+The plan is three steps - add the marketplace, install the plugin, paste your own ClickUp token. Then ask Claude to list a workspace and you are working.
+
+Works with any ClickUp workspace. You supply your own personal token, and every person who uses the plugin supplies their own.
 
 ## Install
 
-Standalone, just this plugin:
+Standalone, just this plugin.
 
 ```
 /plugin marketplace add juliandickie/clickup-plugin
@@ -31,7 +54,31 @@ Supply the token in any one of these ways. The plugin resolves them in this orde
 api_token = "pk_your_token_here"
 ```
 
-The token is never written to any repository, never logged, and never sent anywhere except `api.clickup.com`. Every person who uses the plugin supplies their own.
+The token is never written to any repository, never logged, and never sent anywhere except `api.clickup.com`.
+
+## Token discipline - the core difference
+
+<p align="center">
+  <img src="assets/token-discipline.png" alt="Token discipline - schemas stripped by default, fetched once on demand" width="100%">
+</p>
+
+ClickUp returns every custom field's full option list (`type_config`) on every task. On a list with dozens of options across hundreds of tasks that is tens of thousands of redundant tokens per pull. `list_tasks` and `get_task` strip `type_config` by default. When you genuinely need the option catalogue, call `list_custom_fields` once for the list, or pass `include_field_schema: true` on a specific call. This is the single biggest reason to use this plugin over the stock connector.
+
+## Safety model
+
+<p align="center">
+  <img src="assets/safety-gates.png" alt="Every write passes through a confirmation gate before it reaches ClickUp" width="100%">
+</p>
+
+Every write is gated. The write tools refuse to run unless invoked through a `/clickup-*` command that has shown you a confirmation summary and received an explicit yes. There is no path to a silent write.
+
+- Bulk operations via the MCP tool are recommended for up to 10 tasks. Sets larger than 10 use the bundled clickup-batch runner. The MCP tool still hard-refuses more than 100 as a safety backstop.
+
+- A bulk delete needs a second explicit confirmation in addition to the normal one. A 100-task delete cannot happen by accident.
+
+- Set `CLICKUP_DRY_RUN=1` to block all writes globally. In dry-run, write tools return a clearly labelled synthetic response and never touch ClickUp. Reads still work.
+
+- Every mutating call is appended to a local audit log at `~/.local/share/clickup-plugin/audit.log` with a timestamp, the operator, the operation, your confirmation summary, and the affected ids. The audit write is best-effort and never aborts your operation.
 
 ## What you get
 
@@ -49,7 +96,7 @@ Commands (explicit, confirmed writes).
 
 - `/clickup-bulk-apply` - apply a previously previewed bulk change to up to 10 tasks, after explicit confirmation. Larger sets use the bundled clickup-batch runner. Bulk deletes require a second, separate confirmation.
 
-MCP tools (Claude calls these as needed, with the safety rules below).
+MCP tools (Claude calls these as needed, with the safety rules above).
 
 - Navigation - `list_workspaces`, `list_spaces`, `list_folders`, `list_lists`, `get_list`.
 
@@ -59,25 +106,21 @@ MCP tools (Claude calls these as needed, with the safety rules below).
 
 - Bulk (gated, capped) - `bulk_update_tasks`.
 
-## Token discipline - the core difference
+## Bulk and large jobs
 
-ClickUp returns every custom field's full option list (`type_config`) on every task. On a list with dozens of options across hundreds of tasks that is tens of thousands of redundant tokens per pull. `list_tasks` and `get_task` strip `type_config` by default. When you genuinely need the option catalogue, call `list_custom_fields` once for the list, or pass `include_field_schema: true` on a specific call. This is the single biggest reason to use this plugin over the stock connector.
-
-## Safety model
-
-Every write is gated. The write tools refuse to run unless invoked through a `/clickup-*` command that has shown you a confirmation summary and received an explicit yes. There is no path to a silent write.
-
-- Bulk operations via the MCP tool are recommended for up to 10 tasks. Sets larger than 10 use the bundled clickup-batch runner. The MCP tool still hard-refuses more than 100 as a safety backstop.
-
-- A bulk delete needs a second explicit confirmation in addition to the normal one. A 100-task delete cannot happen by accident.
-
-- Set `CLICKUP_DRY_RUN=1` to block all writes globally. In dry-run, write tools return a clearly labelled synthetic response and never touch ClickUp. Reads still work.
-
-- Every mutating call is appended to a local audit log at `~/.local/share/clickup-plugin/audit.log` with a timestamp, the operator, the operation, your confirmation summary, and the affected ids. The audit write is best-effort and never aborts your operation.
-
-## Large or idempotent jobs
+<p align="center">
+  <img src="assets/bulk-routing.png" alt="Bulk routing - 10 or fewer through the command, more through the runner, hard cap at 100" width="100%">
+</p>
 
 `bulk_update_tasks` is recommended for sets of up to 10 tasks. For larger sets, or any job you want to run idempotently with a dry-run preview and a written report, use the `clickup-batch` runner. It ships with this plugin (installed as `clickup-batch` on PATH). It is dry-run by default, replaces a marker block in place so re-runs do not duplicate, and paces writes under ClickUp's rate limit. The MCP bulk tool hard-refuses more than 100 tasks as a safety backstop, but the recommended path for more than 10 tasks is the runner.
+
+## The audit log
+
+<p align="center">
+  <img src="assets/audit-log.png" alt="Every mutation appends one line to a local, never-uploaded audit log" width="100%">
+</p>
+
+Every mutating call appends one line to `~/.local/share/clickup-plugin/audit.log` - timestamp, operator, operation, your confirmation summary, and the affected task ids. It is local only and never uploaded. The audit write is best-effort. If it fails (a read-only disk, for example) it logs to stderr and your operation still completes. The log is the answer to "what did this actually change", and it is yours alone.
 
 ## Requirements
 
