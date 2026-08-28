@@ -6,7 +6,8 @@
       "env": {
         "CLICKUP_API_TOKEN": "${user_config.api_token}",
         "CLICKUP_BASE_URL": "${CLICKUP_BASE_URL}",
-        "CLICKUP_DRY_RUN": "${CLICKUP_DRY_RUN}"
+        "CLICKUP_DRY_RUN": "${CLICKUP_DRY_RUN}",
+        "CLICKUP_OP_ACCOUNT": "${CLICKUP_OP_ACCOUNT}"
       }
     }
   }

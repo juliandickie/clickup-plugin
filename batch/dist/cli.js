@@ -2038,15 +2038,16 @@ import { join } from "node:path";
 function deriveV3BaseUrl(baseUrl) {
   return baseUrl.endsWith("/v2") ? `${baseUrl.slice(0, -"/v2".length)}/v3` : baseUrl;
 }
-function resolveOpReference(ref) {
+function resolveOpReference(ref, account) {
+  const args = account ? ["read", ref, "--account", account] : ["read", ref];
   try {
-    const out = execFileSync("op", ["read", ref], {
+    const out = execFileSync("op", args, {
       stdio: ["ignore", "pipe", "pipe"]
     });
     return out.toString("utf8").trim();
   } catch (err) {
     throw new Error(
-      `Failed to resolve 1Password reference "${ref}". Ensure the 1Password CLI ('op') is installed, you are signed in, and the reference is valid. Underlying error: ${err.message}`
+      `Failed to resolve 1Password reference "${ref}". Ensure the 1Password CLI ('op') is installed, you are signed in, and the reference is valid. If you are signed in to MULTIPLE 1Password accounts, set CLICKUP_OP_ACCOUNT (or op_account in ~/.config/clickup-plugin/config.toml) to the account's sign-in address, e.g. my-team.1password.com. Underlying error: ${err.message}`
     );
   }
 }
@@ -2055,16 +2056,18 @@ function loadFromTomlFallback() {
   try {
     const raw = readFileSync(path, "utf8");
     const parsed = import_toml.default.parse(raw);
-    return typeof parsed.api_token === "string" ? parsed.api_token : void 0;
+    return {
+      apiToken: typeof parsed.api_token === "string" ? parsed.api_token : void 0,
+      opAccount: typeof parsed.op_account === "string" ? parsed.op_account : void 0
+    };
   } catch {
-    return void 0;
+    return {};
   }
 }
 async function loadConfig() {
-  let raw = process.env.CLICKUP_API_TOKEN?.trim();
-  if (!raw) {
-    raw = loadFromTomlFallback()?.trim();
-  }
+  const toml = loadFromTomlFallback();
+  const envToken = process.env.CLICKUP_API_TOKEN?.trim();
+  const raw = (envToken && !envToken.includes("${") ? envToken : void 0) || toml.apiToken?.trim();
   if (!raw) {
     throw new Error(
       `CLICKUP_API_TOKEN is not set. Configure it one of three ways:
@@ -2074,7 +2077,9 @@ async function loadConfig() {
 See README for details.`
     );
   }
-  const apiToken = raw.startsWith("op://") ? resolveOpReference(raw).trim() : raw;
+  const rawOpAccount = process.env.CLICKUP_OP_ACCOUNT?.trim();
+  const opAccount = rawOpAccount && !rawOpAccount.includes("${") ? rawOpAccount : toml.opAccount?.trim();
+  const apiToken = raw.startsWith("op://") ? resolveOpReference(raw, opAccount).trim() : raw;
   const rawBaseUrl = process.env.CLICKUP_BASE_URL?.trim();
   const baseUrl = rawBaseUrl && !rawBaseUrl.includes("${") ? rawBaseUrl : "https://api.clickup.com/api/v2";
   return {

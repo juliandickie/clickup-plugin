@@ -56,6 +56,13 @@ Supply the token in any one of these ways. The plugin resolves them in this orde
 api_token = "pk_your_token_here"
 ```
 
+The `api_token` in config.toml may also be an `op://` reference. If your machine is signed in to MORE THAN ONE 1Password account, the `op` CLI needs to be told which account holds the item - set `CLICKUP_OP_ACCOUNT` (env) or `op_account` (config.toml) to that account's sign-in address or account id, for example:
+
+```toml
+api_token = "op://Private/ClickUp API Token/credential"
+op_account = "my-team.1password.com"
+```
+
 The token is never written to any repository, never logged, and never sent anywhere except `api.clickup.com`.
 
 ## Token discipline - the core difference

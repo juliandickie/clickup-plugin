@@ -12,7 +12,7 @@ Practical walkthroughs, the safety behaviour you will actually hit, and troubles
 
    - Or export `CLICKUP_API_TOKEN=pk_...` (or `CLICKUP_API_TOKEN=op://Vault/ClickUp/credential` if you use the 1Password CLI).
 
-   - Or create `~/.config/clickup-plugin/config.toml` with `api_token = "pk_..."`.
+   - Or create `~/.config/clickup-plugin/config.toml` with `api_token = "pk_..."` (or an `op://` reference; add `op_account = "your-team.1password.com"` on the next line if you are signed in to more than one 1Password account).
 
 3. Sanity check - ask Claude to "list my ClickUp workspaces". You should see your workspaces. A 401 means the token is wrong or revoked.
 
@@ -67,6 +67,8 @@ Every mutating call appends one line to `~/.local/share/clickup-plugin/audit.log
 ## Troubleshooting
 
 - 401 Unauthorized at startup - the token is missing, mistyped, or revoked. Regenerate it in ClickUp at Settings - Apps and re-supply it.
+
+- "Failed to resolve 1Password reference ... multiple accounts found" - your machine is signed in to more than one 1Password account and the op CLI needs to be told which one holds the item. Set `CLICKUP_OP_ACCOUNT` (or `op_account` in config.toml) to that account's sign-in address, e.g. `my-team.1password.com`. Also make sure the 1Password app is unlocked - `op read` authorises through it.
 
 - A bulk run reports many failures - usually transient rate limiting. Re-run `/clickup-bulk-apply`; it only changes what still needs changing.
 
