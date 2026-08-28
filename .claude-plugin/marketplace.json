@@ -7,12 +7,12 @@
     "url": "https://github.com/juliandickie"
   },
   "metadata": {
-    "version": "0.1.4"
+    "version": "0.2.0"
   },
   "plugins": [
     {
       "name": "clickup",
-      "description": "Talk to ClickUp from Claude Code. Token-disciplined task access and first-class, audited bulk operations.",
+      "description": "Talk to ClickUp from Claude Code. Token-disciplined task access, first-class audited bulk operations, workspace-wide filtering, comment reading, and v3 Docs.",
       "author": {
         "name": "Institute of Digital Dentistry",
         "email": "julian@instituteofdigitaldentistry.com"

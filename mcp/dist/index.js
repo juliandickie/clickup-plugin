@@ -23106,6 +23106,9 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+function deriveV3BaseUrl(baseUrl) {
+  return baseUrl.endsWith("/v2") ? `${baseUrl.slice(0, -"/v2".length)}/v3` : baseUrl;
+}
 function resolveOpReference(ref) {
   try {
     const out = execFileSync("op", ["read", ref], {
@@ -23148,6 +23151,7 @@ See README for details.`
   return {
     apiToken,
     baseUrl,
+    baseUrlV3: deriveV3BaseUrl(baseUrl),
     dryRun: process.env.CLICKUP_DRY_RUN === "1"
   };
 }
@@ -23181,29 +23185,33 @@ var ClickUpClient = class {
     this.fetchImpl = fetchImpl;
     this.sleepImpl = sleepImpl;
   }
-  async get(path, params) {
-    return this.request(this.buildUrl(path, params), { method: "GET" });
+  async get(path, params, opts) {
+    return this.request(this.buildUrl(path, params, opts), {
+      method: "GET"
+    });
   }
-  async post(path, body) {
+  async post(path, body, opts) {
     if (this.config.dryRun) return this.dryRunResponse("POST", path, body);
-    return this.request(this.buildUrl(path), {
+    return this.request(this.buildUrl(path, void 0, opts), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
   }
-  async put(path, body) {
+  async put(path, body, opts) {
     if (this.config.dryRun) return this.dryRunResponse("PUT", path, body);
-    return this.request(this.buildUrl(path), {
+    return this.request(this.buildUrl(path, void 0, opts), {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
   }
-  async delete(path) {
+  async delete(path, params, opts) {
     if (this.config.dryRun)
       return this.dryRunResponse("DELETE", path, void 0);
-    return this.request(this.buildUrl(path), { method: "DELETE" });
+    return this.request(this.buildUrl(path, params, opts), {
+      method: "DELETE"
+    });
   }
   /**
    * Walk a ClickUp list endpoint that paginates via a 0-indexed page
@@ -23236,11 +23244,19 @@ var ClickUpClient = class {
     );
     return payload;
   }
-  buildUrl(path, params) {
-    const base = `${this.config.baseUrl}${path}`;
+  apiRoot(version2) {
+    if (version2 === "v3") {
+      return this.config.baseUrlV3 ?? deriveV3BaseUrl(this.config.baseUrl);
+    }
+    return this.config.baseUrl;
+  }
+  buildUrl(path, params, opts) {
+    const base = `${this.apiRoot(opts?.version ?? "v2")}${path}`;
     if (!params || Object.keys(params).length === 0) return base;
-    const qs = Object.entries(params).map(
-      ([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`
+    const qs = Object.entries(params).flatMap(
+      ([k, v]) => Array.isArray(v) ? v.map(
+        (item) => `${encodeURIComponent(`${k}[]`)}=${encodeURIComponent(String(item))}`
+      ) : [`${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`]
     ).join("&");
     return `${base}?${qs}`;
   }
@@ -23380,6 +23396,38 @@ async function getTask(client, args) {
 async function listCustomFields(client, args) {
   return client.get(`/list/${args.list_id}/field`);
 }
+var COMMENTS_PAGE_SIZE = 25;
+var COMMENTS_MAX_PAGES = 20;
+async function getTaskComments(client, args) {
+  const comments = [];
+  let cursor;
+  const maxPages = args.fetch_all ? COMMENTS_MAX_PAGES : 1;
+  for (let page = 0; page < maxPages; page++) {
+    const body = await client.get(
+      `/task/${args.task_id}/comment`,
+      cursor ? { start: cursor.start, start_id: cursor.start_id } : void 0
+    );
+    const chunk = body.comments ?? [];
+    comments.push(...chunk);
+    if (chunk.length < COMMENTS_PAGE_SIZE) {
+      return { count: comments.length, complete: true, comments };
+    }
+    const last = chunk[chunk.length - 1];
+    if (!last?.id || !last?.date) {
+      return { count: comments.length, complete: false, comments };
+    }
+    cursor = { start: String(last.date), start_id: String(last.id) };
+  }
+  return {
+    count: comments.length,
+    complete: false,
+    next_cursor: cursor,
+    comments
+  };
+}
+async function getCommentReplies(client, args) {
+  return client.get(`/comment/${args.comment_id}/reply`);
+}
 function registerTaskReadTools(server, client) {
   server.tool(
     "list_tasks",
@@ -23405,6 +23453,21 @@ function registerTaskReadTools(server, client) {
     "List the custom fields available on a list (includes option schemas - call this once instead of reading them off every task).",
     { list_id: external_exports.string().describe("List id") },
     async (a) => jsonResult(await listCustomFields(client, a))
+  );
+  server.tool(
+    "get_task_comments",
+    "Read the comments on a task, newest first. Returns the 25 most recent by default; set fetch_all=true to walk the full history (capped at 500). Each comment carries a reply_count - use get_comment_replies for a thread.",
+    {
+      task_id: external_exports.string().describe("Task id"),
+      fetch_all: external_exports.boolean().optional().describe("Walk the full comment history (default false - one page)")
+    },
+    async (a) => jsonResult(await getTaskComments(client, a))
+  );
+  server.tool(
+    "get_comment_replies",
+    "Read the threaded replies under one comment (see reply_count on get_task_comments results).",
+    { comment_id: external_exports.string().describe("Comment id") },
+    async (a) => jsonResult(await getCommentReplies(client, a))
   );
 }
 
@@ -23504,12 +23567,19 @@ var addCommentSchema = external_exports.object({
   comment_text: external_exports.string().min(1).describe("Comment body"),
   ...CONFIRM_SHAPE
 });
+var RELATIONSHIP_KIND = external_exports.enum(["link", "depends_on", "blocks"]).describe(
+  "link (related tasks), depends_on (this task is blocked by the target), or blocks (the target is blocked by this task)"
+);
 var setTaskRelationshipSchema = external_exports.object({
   task_id: external_exports.string().describe("Source task id"),
   links_to: external_exports.string().describe("Target task id"),
-  kind: external_exports.enum(["link", "depends_on"]).describe(
-    "link (related tasks) or depends_on (this task is blocked by the target)"
-  ),
+  kind: RELATIONSHIP_KIND,
+  ...CONFIRM_SHAPE
+});
+var removeTaskRelationshipSchema = external_exports.object({
+  task_id: external_exports.string().describe("Source task id"),
+  links_to: external_exports.string().describe("Target task id the relationship points at"),
+  kind: RELATIONSHIP_KIND,
   ...CONFIRM_SHAPE
 });
 async function createTask(client, args) {
@@ -23561,12 +23631,33 @@ async function setTaskRelationship(client, args) {
       `/task/${args.task_id}/link/${args.links_to}`,
       {}
     );
-  } else {
+  } else if (args.kind === "depends_on") {
     res = await client.post(`/task/${args.task_id}/dependency`, {
       depends_on: args.links_to
     });
+  } else {
+    res = await client.post(`/task/${args.task_id}/dependency`, {
+      dependency_of: args.links_to
+    });
   }
   audit("task.relationship", args.confirmation_summary, args.task_id);
+  return res ?? { ok: true };
+}
+async function removeTaskRelationship(client, args) {
+  requireConfirmation(args.confirmed_by_user, args.confirmation_summary);
+  let res;
+  if (args.kind === "link") {
+    res = await client.delete(`/task/${args.task_id}/link/${args.links_to}`);
+  } else if (args.kind === "depends_on") {
+    res = await client.delete(`/task/${args.task_id}/dependency`, {
+      depends_on: args.links_to
+    });
+  } else {
+    res = await client.delete(`/task/${args.task_id}/dependency`, {
+      dependency_of: args.links_to
+    });
+  }
+  audit("task.relationship_remove", args.confirmation_summary, args.task_id);
   return res ?? { ok: true };
 }
 function registerTaskWriteTools(server, client) {
@@ -23602,9 +23693,15 @@ function registerTaskWriteTools(server, client) {
   );
   server.tool(
     "set_task_relationship",
-    WRITE_WARNING + " Links a task to another, or sets a depends_on dependency.",
+    WRITE_WARNING + " Links a task to another, or sets a dependency - depends_on (this task waits on the target) or blocks (the target waits on this task).",
     setTaskRelationshipSchema.shape,
     async (a) => jsonResult(await setTaskRelationship(client, a))
+  );
+  server.tool(
+    "remove_task_relationship",
+    WRITE_WARNING + " Removes a link or dependency previously set between two tasks. The kind and direction must match how it was created.",
+    removeTaskRelationshipSchema.shape,
+    async (a) => jsonResult(await removeTaskRelationship(client, a))
   );
 }
 
@@ -23701,8 +23798,167 @@ function registerBulkTools(server, client) {
   );
 }
 
+// src/tools/workspace.ts
+var TEAM_PAGE_SIZE = 100;
+var TEAM_MAX_PAGES = 200;
+async function filterWorkspaceTasks(client, args) {
+  const params = {};
+  if (args.list_ids?.length) params.list_ids = args.list_ids;
+  if (args.space_ids?.length) params.space_ids = args.space_ids;
+  if (args.folder_ids?.length) params.project_ids = args.folder_ids;
+  if (args.statuses?.length) params.statuses = args.statuses;
+  if (args.assignees?.length) params.assignees = args.assignees;
+  if (args.tags?.length) params.tags = args.tags;
+  if (args.include_closed !== void 0)
+    params.include_closed = args.include_closed;
+  if (args.subtasks !== void 0) params.subtasks = args.subtasks;
+  if (args.due_date_gt !== void 0) params.due_date_gt = args.due_date_gt;
+  if (args.due_date_lt !== void 0) params.due_date_lt = args.due_date_lt;
+  if (args.date_updated_gt !== void 0)
+    params.date_updated_gt = args.date_updated_gt;
+  if (args.date_updated_lt !== void 0)
+    params.date_updated_lt = args.date_updated_lt;
+  if (args.order_by) params.order_by = args.order_by;
+  if (args.reverse !== void 0) params.reverse = args.reverse;
+  const tasks = [];
+  for (let page = 0; page < TEAM_MAX_PAGES; page++) {
+    const body = await client.get(
+      `/team/${args.workspace_id}/task`,
+      { ...params, page }
+    );
+    const chunk = body.tasks ?? [];
+    tasks.push(...chunk);
+    if (chunk.length < TEAM_PAGE_SIZE) break;
+  }
+  return {
+    count: tasks.length,
+    tasks: tasks.map(
+      (t) => stripFieldSchema(t, args.include_field_schema ?? false)
+    )
+  };
+}
+async function listMembers(client, args) {
+  const body = await client.get("/team");
+  const team = (body.teams ?? []).find(
+    (t) => String(t.id) === args.workspace_id
+  );
+  if (!team) {
+    throw new Error(
+      `Workspace ${args.workspace_id} not found for this token. Call list_workspaces to see the available ids.`
+    );
+  }
+  const members = (team.members ?? []).map((m) => ({
+    id: m.user?.id,
+    username: m.user?.username,
+    email: m.user?.email,
+    initials: m.user?.initials,
+    role: m.user?.role
+  }));
+  return { workspace: team.name, count: members.length, members };
+}
+function registerWorkspaceTools(server, client) {
+  server.tool(
+    "filter_workspace_tasks",
+    "Filter tasks ACROSS the whole workspace (lists, spaces, folders, statuses, assignees, tags, date windows) in one call - use this instead of walking lists one by one. Auto-paginated; custom-field option schemas stripped by default.",
+    {
+      workspace_id: external_exports.string().describe("Workspace (team) id"),
+      list_ids: external_exports.array(external_exports.string()).optional().describe("Filter by list ids"),
+      space_ids: external_exports.array(external_exports.string()).optional().describe("Filter by space ids"),
+      folder_ids: external_exports.array(external_exports.string()).optional().describe("Filter by folder ids"),
+      statuses: external_exports.array(external_exports.string()).optional().describe("Filter by status names"),
+      assignees: external_exports.array(external_exports.number()).optional().describe("Filter by assignee user ids (see list_members)"),
+      tags: external_exports.array(external_exports.string()).optional().describe("Filter by tag names"),
+      include_closed: external_exports.boolean().optional().describe("Include closed tasks (default false)"),
+      subtasks: external_exports.boolean().optional().describe("Include subtasks (default false)"),
+      due_date_gt: external_exports.number().optional().describe("Due after (Unix ms)"),
+      due_date_lt: external_exports.number().optional().describe("Due before (Unix ms)"),
+      date_updated_gt: external_exports.number().optional().describe("Updated after (Unix ms)"),
+      date_updated_lt: external_exports.number().optional().describe("Updated before (Unix ms)"),
+      order_by: external_exports.enum(["id", "created", "updated", "due_date"]).optional().describe("Sort field"),
+      reverse: external_exports.boolean().optional().describe("Reverse the sort"),
+      include_field_schema: external_exports.boolean().optional().describe("Include custom-field option schemas (default false - large)")
+    },
+    async (a) => jsonResult(await filterWorkspaceTasks(client, a))
+  );
+  server.tool(
+    "list_members",
+    "List workspace members trimmed to id, username, email, initials, and role - the ids feed assignee arguments on create/update/bulk tools.",
+    { workspace_id: external_exports.string().describe("Workspace (team) id") },
+    async (a) => jsonResult(await listMembers(client, a))
+  );
+}
+
+// src/tools/docs.ts
+var V3 = { version: "v3" };
+async function searchDocs(client, args) {
+  const params = {};
+  if (args.parent_type) params.parent_type = args.parent_type;
+  if (args.parent_id) params.parent_id = args.parent_id;
+  if (args.creator !== void 0) params.creator = args.creator;
+  if (args.doc_id) params.id = args.doc_id;
+  if (args.archived !== void 0) params.archived = args.archived;
+  if (args.limit !== void 0) params.limit = args.limit;
+  if (args.cursor) params.cursor = args.cursor;
+  return client.get(`/workspaces/${args.workspace_id}/docs`, params, V3);
+}
+async function listDocPages(client, args) {
+  return client.get(
+    `/workspaces/${args.workspace_id}/docs/${args.doc_id}/page_listing`,
+    { max_page_depth: args.max_page_depth ?? -1 },
+    V3
+  );
+}
+async function getDocPages(client, args) {
+  return client.get(
+    `/workspaces/${args.workspace_id}/docs/${args.doc_id}/pages`,
+    {
+      max_page_depth: args.max_page_depth ?? -1,
+      content_format: args.content_format ?? "text/md"
+    },
+    V3
+  );
+}
+function registerDocsTools(server, client) {
+  server.tool(
+    "search_docs",
+    "Find Docs in a workspace (API v3). One page per call (default 50, max 100); pass the returned next_cursor as cursor to continue.",
+    {
+      workspace_id: external_exports.string().describe("Workspace id"),
+      parent_type: external_exports.enum(["SPACE", "FOLDER", "LIST", "EVERYTHING", "WORKSPACE"]).optional().describe("Filter by parent container type"),
+      parent_id: external_exports.string().optional().describe("Filter by parent id"),
+      creator: external_exports.number().optional().describe("Filter by creator user id"),
+      doc_id: external_exports.string().optional().describe("Fetch one specific doc id"),
+      archived: external_exports.boolean().optional().describe("Include archived docs (default false)"),
+      limit: external_exports.number().min(10).max(100).optional().describe("Results per page (default 50)"),
+      cursor: external_exports.string().optional().describe("next_cursor from the previous page")
+    },
+    async (a) => jsonResult(await searchDocs(client, a))
+  );
+  server.tool(
+    "list_doc_pages",
+    "Table of contents for a Doc (API v3) - page ids and names only, no content. Call this before get_doc_pages so you fetch only what you need.",
+    {
+      workspace_id: external_exports.string().describe("Workspace id"),
+      doc_id: external_exports.string().describe("Doc id (see search_docs)"),
+      max_page_depth: external_exports.number().optional().describe("Nesting depth to include (-1 = unlimited, default)")
+    },
+    async (a) => jsonResult(await listDocPages(client, a))
+  );
+  server.tool(
+    "get_doc_pages",
+    "Fetch a Doc's page content (API v3), markdown by default. Content for every page at once - for a large Doc check list_doc_pages first.",
+    {
+      workspace_id: external_exports.string().describe("Workspace id"),
+      doc_id: external_exports.string().describe("Doc id (see search_docs)"),
+      max_page_depth: external_exports.number().optional().describe("Nesting depth to include (-1 = unlimited, default)"),
+      content_format: external_exports.enum(["text/md", "text/plain"]).optional().describe("Content format (default text/md)")
+    },
+    async (a) => jsonResult(await getDocPages(client, a))
+  );
+}
+
 // src/index.ts
-var VERSION = true ? "0.1.4" : "0.0.0-dev";
+var VERSION = true ? "0.2.0" : "0.0.0-dev";
 async function main() {
   const config2 = await loadConfig();
   const client = new ClickUpClient(config2);
@@ -23729,6 +23985,8 @@ async function main() {
   registerTaskReadTools(server, client);
   registerTaskWriteTools(server, client);
   registerBulkTools(server, client);
+  registerWorkspaceTools(server, client);
+  registerDocsTools(server, client);
   await server.connect(new StdioServerTransport());
 }
 main().catch((err) => {

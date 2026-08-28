@@ -1,7 +1,7 @@
 {
   "name": "clickup",
-  "version": "0.1.4",
-  "description": "Talk to ClickUp from Claude Code. Token-disciplined task access and first-class, audited bulk operations. Proactively activates for: (1) listing or auditing ClickUp tasks, (2) bulk task updates, (3) single task create/update.",
+  "version": "0.2.0",
+  "description": "Talk to ClickUp from Claude Code. Token-disciplined task access, first-class audited bulk operations, workspace-wide filtering, comment reading, and v3 Docs. Proactively activates for: (1) listing, filtering, or auditing ClickUp tasks, (2) bulk task updates, (3) single task create/update, (4) reading ClickUp Docs.",
   "author": {
     "name": "Institute of Digital Dentistry",
     "email": "julian@instituteofdigitaldentistry.com"

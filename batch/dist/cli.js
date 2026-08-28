@@ -2029,6 +2029,62 @@ var require_toml = __commonJS({
 // ../batch/src/cli.ts
 import { writeFileSync } from "node:fs";
 
+// src/config.ts
+var import_toml = __toESM(require_toml(), 1);
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+function deriveV3BaseUrl(baseUrl) {
+  return baseUrl.endsWith("/v2") ? `${baseUrl.slice(0, -"/v2".length)}/v3` : baseUrl;
+}
+function resolveOpReference(ref) {
+  try {
+    const out = execFileSync("op", ["read", ref], {
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    return out.toString("utf8").trim();
+  } catch (err) {
+    throw new Error(
+      `Failed to resolve 1Password reference "${ref}". Ensure the 1Password CLI ('op') is installed, you are signed in, and the reference is valid. Underlying error: ${err.message}`
+    );
+  }
+}
+function loadFromTomlFallback() {
+  const path = join(homedir(), ".config", "clickup-plugin", "config.toml");
+  try {
+    const raw = readFileSync(path, "utf8");
+    const parsed = import_toml.default.parse(raw);
+    return typeof parsed.api_token === "string" ? parsed.api_token : void 0;
+  } catch {
+    return void 0;
+  }
+}
+async function loadConfig() {
+  let raw = process.env.CLICKUP_API_TOKEN?.trim();
+  if (!raw) {
+    raw = loadFromTomlFallback()?.trim();
+  }
+  if (!raw) {
+    throw new Error(
+      `CLICKUP_API_TOKEN is not set. Configure it one of three ways:
+  1. Set CLICKUP_API_TOKEN env var to your token (pk_...)
+  2. Set CLICKUP_API_TOKEN to a 1Password reference (op://Vault/Item/credential)
+  3. Create ~/.config/clickup-plugin/config.toml with 'api_token = "..."'
+See README for details.`
+    );
+  }
+  const apiToken = raw.startsWith("op://") ? resolveOpReference(raw).trim() : raw;
+  const rawBaseUrl = process.env.CLICKUP_BASE_URL?.trim();
+  const baseUrl = rawBaseUrl && !rawBaseUrl.includes("${") ? rawBaseUrl : "https://api.clickup.com/api/v2";
+  return {
+    apiToken,
+    baseUrl,
+    baseUrlV3: deriveV3BaseUrl(baseUrl),
+    dryRun: process.env.CLICKUP_DRY_RUN === "1"
+  };
+}
+
 // src/errors.ts
 var ClickUpError = class extends Error {
   constructor(code, status, message, details) {
@@ -2058,29 +2114,33 @@ var ClickUpClient = class {
     this.fetchImpl = fetchImpl;
     this.sleepImpl = sleepImpl;
   }
-  async get(path, params) {
-    return this.request(this.buildUrl(path, params), { method: "GET" });
+  async get(path, params, opts) {
+    return this.request(this.buildUrl(path, params, opts), {
+      method: "GET"
+    });
   }
-  async post(path, body) {
+  async post(path, body, opts) {
     if (this.config.dryRun) return this.dryRunResponse("POST", path, body);
-    return this.request(this.buildUrl(path), {
+    return this.request(this.buildUrl(path, void 0, opts), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
   }
-  async put(path, body) {
+  async put(path, body, opts) {
     if (this.config.dryRun) return this.dryRunResponse("PUT", path, body);
-    return this.request(this.buildUrl(path), {
+    return this.request(this.buildUrl(path, void 0, opts), {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
   }
-  async delete(path) {
+  async delete(path, params, opts) {
     if (this.config.dryRun)
       return this.dryRunResponse("DELETE", path, void 0);
-    return this.request(this.buildUrl(path), { method: "DELETE" });
+    return this.request(this.buildUrl(path, params, opts), {
+      method: "DELETE"
+    });
   }
   /**
    * Walk a ClickUp list endpoint that paginates via a 0-indexed page
@@ -2113,11 +2173,19 @@ var ClickUpClient = class {
     );
     return payload;
   }
-  buildUrl(path, params) {
-    const base = `${this.config.baseUrl}${path}`;
+  apiRoot(version) {
+    if (version === "v3") {
+      return this.config.baseUrlV3 ?? deriveV3BaseUrl(this.config.baseUrl);
+    }
+    return this.config.baseUrl;
+  }
+  buildUrl(path, params, opts) {
+    const base = `${this.apiRoot(opts?.version ?? "v2")}${path}`;
     if (!params || Object.keys(params).length === 0) return base;
-    const qs = Object.entries(params).map(
-      ([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`
+    const qs = Object.entries(params).flatMap(
+      ([k, v]) => Array.isArray(v) ? v.map(
+        (item) => `${encodeURIComponent(`${k}[]`)}=${encodeURIComponent(String(item))}`
+      ) : [`${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`]
     ).join("&");
     return `${base}?${qs}`;
   }
@@ -2167,58 +2235,6 @@ var ClickUpClient = class {
     return 500 * Math.pow(2, attempt);
   }
 };
-
-// src/config.ts
-var import_toml = __toESM(require_toml(), 1);
-import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
-function resolveOpReference(ref) {
-  try {
-    const out = execFileSync("op", ["read", ref], {
-      stdio: ["ignore", "pipe", "pipe"]
-    });
-    return out.toString("utf8").trim();
-  } catch (err) {
-    throw new Error(
-      `Failed to resolve 1Password reference "${ref}". Ensure the 1Password CLI ('op') is installed, you are signed in, and the reference is valid. Underlying error: ${err.message}`
-    );
-  }
-}
-function loadFromTomlFallback() {
-  const path = join(homedir(), ".config", "clickup-plugin", "config.toml");
-  try {
-    const raw = readFileSync(path, "utf8");
-    const parsed = import_toml.default.parse(raw);
-    return typeof parsed.api_token === "string" ? parsed.api_token : void 0;
-  } catch {
-    return void 0;
-  }
-}
-async function loadConfig() {
-  let raw = process.env.CLICKUP_API_TOKEN?.trim();
-  if (!raw) {
-    raw = loadFromTomlFallback()?.trim();
-  }
-  if (!raw) {
-    throw new Error(
-      `CLICKUP_API_TOKEN is not set. Configure it one of three ways:
-  1. Set CLICKUP_API_TOKEN env var to your token (pk_...)
-  2. Set CLICKUP_API_TOKEN to a 1Password reference (op://Vault/Item/credential)
-  3. Create ~/.config/clickup-plugin/config.toml with 'api_token = "..."'
-See README for details.`
-    );
-  }
-  const apiToken = raw.startsWith("op://") ? resolveOpReference(raw).trim() : raw;
-  const rawBaseUrl = process.env.CLICKUP_BASE_URL?.trim();
-  const baseUrl = rawBaseUrl && !rawBaseUrl.includes("${") ? rawBaseUrl : "https://api.clickup.com/api/v2";
-  return {
-    apiToken,
-    baseUrl,
-    dryRun: process.env.CLICKUP_DRY_RUN === "1"
-  };
-}
 
 // ../batch/src/runner.ts
 var MARKER_RE = /\n*\n---\n## clickup-batch context \(synced [^)]+\)[\s\S]*$/;

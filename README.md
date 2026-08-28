@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude%20Code-plugin-8A2BE2" alt="Claude Code plugin">
-  <img src="https://img.shields.io/badge/ClickUp%20API-v2-7B68EE" alt="ClickUp API v2">
+  <img src="https://img.shields.io/badge/ClickUp%20API-v2%20%2B%20v3-7B68EE" alt="ClickUp API v2 and v3">
   <img src="https://img.shields.io/badge/node-%3E%3D18-3C873A" alt="Node 18 or newer">
   <img src="https://img.shields.io/badge/license-MIT-success" alt="MIT license">
 </p>
@@ -15,13 +15,15 @@
 
 # ClickUp for Claude Code
 
-You run real work in ClickUp, and you drive Claude Code from the terminal. The two should talk to each other. The stock ClickUp connector makes that expensive and nerve-wracking on a real workspace, in two specific ways.
+You run real work in ClickUp, and you drive Claude Code from the terminal. The two should talk to each other. ClickUp's own hosted MCP makes that harder than it should be on a real workspace, in three specific ways.
 
-First, it is wasteful. It inlines the full custom-field option schema (`type_config`) on every single task it returns. On a list with dozens of options across hundreds of tasks, that is tens of thousands of redundant tokens on a single pull, before you have asked a single question.
+First, access. The hosted MCP is OAuth-only - your personal API token is refused. And unless your Workspace pays for the Everything AI add-on, every connected client shares one rolling 24-hour pool of calls for the whole Workspace (1,000 per day on Business), with no way to even monitor usage. One teammate's busy afternoon rate-limits everyone until tomorrow. This plugin runs on your personal token against the public API - around 100 requests per MINUTE on standard plans, per person, with no shared daily pool.
 
-Second, it is not safe to scale. There is no real bulk surface, so a mass change is either a hundred careful single calls or a leap of faith. And the moment a tool can touch a hundred tasks at once, the fear is rational. One bad call could reassign a sprint or delete a quarter of a board, and you would have no record of what happened.
+Second, safety at scale. A mass change through the hosted MCP is an unaudited leap of faith. The moment a tool can touch a hundred tasks at once, the fear is rational. One bad call could reassign a sprint or delete a quarter of a board, and you would have no record of what happened. This plugin puts a hard, explicit confirmation in front of every write, with a capped bulk path, a second confirmation on bulk delete, a dry-run kill switch, an idempotent batch runner for large jobs, and a local audit log of every mutation.
 
-A tool you are afraid to run at scale is not really a tool. This plugin was built for exactly that tension. It strips the schema bloat by default, and it puts a hard, explicit confirmation in front of every write, with a capped bulk path, a dry-run kill switch, and a local audit log of every mutation. You get ClickUp control from Claude Code that is fast, cheap, and auditable enough to actually trust.
+Third, tokens. The hosted MCP has improved here (task summaries are compact by default now), but the moment you expand custom fields it still inlines each dropdown's full option schema on every task. This plugin strips `type_config` everywhere by default and serves the option catalogue exactly once per list, so even expanded reads stay lean.
+
+A tool you are afraid to run at scale is not really a tool. This plugin exists so ClickUp control from Claude Code is fast, unmetered, and auditable enough to actually trust.
 
 The plan is three steps - add the marketplace, install the plugin, paste your own ClickUp token. Then ask Claude to list a workspace and you are working.
 
@@ -62,7 +64,7 @@ The token is never written to any repository, never logged, and never sent anywh
   <img src="assets/token-discipline.png" alt="Token discipline - schemas stripped by default, fetched once on demand" width="100%">
 </p>
 
-ClickUp returns every custom field's full option list (`type_config`) on every task. On a list with dozens of options across hundreds of tasks that is tens of thousands of redundant tokens per pull. `list_tasks` and `get_task` strip `type_config` by default. When you genuinely need the option catalogue, call `list_custom_fields` once for the list, or pass `include_field_schema: true` on a specific call. This is the single biggest reason to use this plugin over the stock connector.
+ClickUp returns every custom field's full option list (`type_config`) on every task. On a list with dozens of options across hundreds of tasks that is tens of thousands of redundant tokens per pull. `list_tasks`, `get_task`, and `filter_workspace_tasks` strip `type_config` by default. When you genuinely need the option catalogue, call `list_custom_fields` once for the list, or pass `include_field_schema: true` on a specific call. ClickUp's hosted MCP now defaults to compact summaries too, but its expanded custom-field reads still inline the schemas per task - this plugin stays lean even when you opt into field values.
 
 ## Safety model
 
@@ -98,13 +100,19 @@ Commands (explicit, confirmed writes).
 
 MCP tools (Claude calls these as needed, with the safety rules above).
 
-- Navigation - `list_workspaces`, `list_spaces`, `list_folders`, `list_lists`, `get_list`.
+- Navigation - `list_workspaces`, `list_spaces`, `list_folders`, `list_lists`, `get_list`, `list_members`.
 
-- Read - `list_tasks` (auto-paginated, schema-stripped by default), `get_task`, `list_custom_fields`.
+- Read - `list_tasks` (auto-paginated, schema-stripped by default), `get_task`, `list_custom_fields`, `get_task_comments`, `get_comment_replies`, `filter_workspace_tasks` (cross-list filtering by status, assignee, tag, and date in one call).
 
-- Single writes (gated) - `create_task`, `update_task`, `delete_task`, `set_custom_field`, `add_comment`, `set_task_relationship`.
+- Docs, read-only on ClickUp API v3 - `search_docs`, `list_doc_pages` (table of contents first, token-disciplined), `get_doc_pages` (markdown).
+
+- Single writes (gated) - `create_task`, `update_task`, `delete_task`, `set_custom_field`, `add_comment`, `set_task_relationship` (link, depends_on, blocks), `remove_task_relationship`.
 
 - Bulk (gated, capped) - `bulk_update_tasks`.
+
+## API v3 posture
+
+ClickUp is migrating its public API to v3 one endpoint group at a time. This plugin runs v2 and v3 side by side - v2 remains the default for the whole task surface (ClickUp has shipped no v3 equivalents there yet), and each capability opts into v3 as ClickUp ships and we verify it. Docs is the first - the three Docs tools run on `/api/v3/`. New v3 groups will be adopted the same way, tested against the live API with v2 as the working backstop, until a full cutover is possible.
 
 ## Bulk and large jobs
 
@@ -130,7 +138,7 @@ Every mutating call appends one line to `~/.local/share/clickup-plugin/audit.log
 
 ## Optional configuration
 
-- `CLICKUP_BASE_URL` - override the API base (defaults to `https://api.clickup.com/api/v2`). An unresolved `${...}` value is ignored and the default is used.
+- `CLICKUP_BASE_URL` - override the API base (defaults to `https://api.clickup.com/api/v2`). A value ending in `/v2` gets its v3 root derived automatically (`/v2` swapped for `/v3`); any other custom value is used unchanged for both versions. An unresolved `${...}` value is ignored and the default is used.
 
 - `CLICKUP_DRY_RUN` - set to `1` to block all writes.
 

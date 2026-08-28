@@ -24,6 +24,18 @@ Practical walkthroughs, the safety behaviour you will actually hit, and troubles
 
 These read paths strip custom-field option schemas by default. If you specifically need a field's option list, ask for the field catalogue (it calls `list_custom_fields` once) rather than reading it off every task.
 
+- "Find every urgent task assigned to Olga across the workspace" - `filter_workspace_tasks` filters across all lists, spaces, and folders in one call (status, assignee, tag, and date filters combine). No more walking lists one by one. Assignee filters take user ids - "who is on this workspace" calls `list_members` for the id, name, email, and role of every member.
+
+- "What's the discussion on task X" - `get_task_comments` reads the 25 most recent comments (newest first), with `fetch_all` walking the full history when you need it. A comment with replies shows a reply_count - `get_comment_replies` pulls the thread.
+
+## Reading Docs
+
+The Docs tools run on ClickUp API v3 (the plugin's first v3 surface - see the README's API v3 posture note).
+
+- "What docs are in the Marketing space" - `search_docs` filters by parent container, creator, or id, one page per call with a cursor to continue.
+
+- "Read the onboarding doc" - `list_doc_pages` first for the table of contents (ids and names, no content), then `get_doc_pages` for the content in markdown. For a large doc, check the TOC before pulling every page.
+
 ## Changing a single task
 
 Use `/clickup-task`. For example `/clickup-task update <task> set status to done`. The command resolves the target, shows you a confirmation summary, and waits. Nothing is written until you reply yes. On no, nothing happens.
@@ -64,4 +76,4 @@ Every mutating call appends one line to `~/.local/share/clickup-plugin/audit.log
 
 - Every request fails to connect - check `CLICKUP_BASE_URL`. If it is unset it defaults correctly. If it was set to an unresolved `${...}` placeholder the plugin ignores it and uses the default, so a connect failure usually means a real custom base URL is wrong.
 
-- Relationship direction - `set_task_relationship` supports `link` and `depends_on` only. `depends_on` means this task is blocked by the target. A `waiting_on` kind was deliberately left out of this version because its ClickUp dependency direction was unverified.
+- Relationship direction - `set_task_relationship` supports `link`, `depends_on` (this task is blocked by the target), and `blocks` (the target is blocked by this task). Both dependency directions were verified against live ClickUp storage on 2026-08-28. `remove_task_relationship` undoes any of the three - the kind and direction must match how the relationship was created.

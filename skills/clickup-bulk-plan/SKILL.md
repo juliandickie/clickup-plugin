@@ -12,7 +12,7 @@ This skill ONLY plans and previews. It never writes. Writing is the
 
 1. Resolve the target list and the filter that selects the tasks.
 
-2. Call list_tasks, filter client-side to the target set, and show the user - the exact task count, the operation, and a sample of 10 affected task names.
+2. Resolve the target set - list_tasks for one list, or filter_workspace_tasks when the set is defined by status, assignee, tag, or date across lists (server-side filters beat client-side sifting). Show the user the exact task count, the operation, and a sample of 10 affected task names.
 
 3. State the routing decision explicitly -
 

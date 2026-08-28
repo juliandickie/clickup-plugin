@@ -17,6 +17,8 @@ Produce a canonical audit so repeated runs are comparable.
 
 4. Compute - total tasks, count by status, percent of tasks with each custom field populated, count with dependencies or linked tasks.
 
+5. Only when the user asks about discussion or activity - get_task_comments on the specific tasks they care about (never on every task in the list; that is one call per task). Keep the canonical output format below unchanged so runs stay comparable; comment findings go under Notes.
+
 ## Output format (verbatim structure)
 
 ```markdown
